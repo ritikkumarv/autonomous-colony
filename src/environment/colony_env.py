@@ -189,10 +189,15 @@ class GridWorld:
 # ENVIRONMENT - Orchestrates the simulation (Principle: Big Picture Thinking)
 # ============================================================================
 
-class CleanColonyEnvironment:
+class ColonyEnvironment:
     """
-    Main environment class following clean code principles.
+    Main environment class for The Autonomous Colony.
     Acts as orchestrator - coordinates agents and world.
+    
+    Follows clean code principles:
+    - Single responsibility
+    - Clear separation of concerns
+    - Focused methods
     """
     
     def __init__(self, n_agents: int = MAX_AGENTS, grid_size: int = GRID_SIZE):
@@ -330,7 +335,7 @@ if __name__ == "__main__":
     print("=" * 70)
     
     # Create environment - simple, clear API
-    env = CleanColonyEnvironment(n_agents=3, grid_size=15)
+    env = ColonyEnvironment(n_agents=3, grid_size=15)
     
     # Reset and get initial observations
     observations = env.reset()

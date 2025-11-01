@@ -234,13 +234,16 @@ Discrete(9)  # 8 directions + collect
 
 **Example Usage:**
 ```python
-from src.environment import ColonyEnvironment, EnvironmentConfig
+from src.environment import ColonyEnvironment
 
-config = EnvironmentConfig(grid_size=20, n_agents=3)
-env = ColonyEnvironment(config)
+# Create environment with 3 agents on a 20x20 grid
+env = ColonyEnvironment(n_agents=3, grid_size=20)
 
-obs, info = env.reset()
-actions = [env.action_space.sample() for _ in range(3)]
+# Reset environment
+observations = env.reset()
+
+# Take actions (0-8: 8 directions + collect)
+actions = [0, 1, 2]  # Example actions for 3 agents
 next_obs, rewards, dones, truncated, info = env.step(actions)
 ```
 

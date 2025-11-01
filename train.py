@@ -20,9 +20,11 @@ import torch
 import matplotlib.pyplot as plt
 from torch.utils.tensorboard import SummaryWriter
 
-# Import all modules (assumes they're in src/)
-# from src.environment import ColonyEnvironment, EnvironmentConfig
-# from src.agents import TabularQLearningAgent, DQNAgent, PPOAgent
+# Import implemented modules
+from src.environment import ColonyEnvironment
+from src.agents import TabularQLearningAgent, DQNAgent, PPOAgent
+
+# TODO: Import when implemented
 # from src.multiagent import MultiAgentPPO
 # from src.advanced import (WorldModelAgent, CuriosityAgent, 
 #                           HierarchicalAgent, CurriculumManager)
@@ -126,35 +128,8 @@ def train(args):
     
     print(f"\n🌍 Creating environment...")
     
-    # Environment config (placeholder - use your actual EnvironmentConfig)
-    env_config = {
-        'grid_size': args.env_size,
-        'n_agents': args.n_agents,
-        'max_steps': args.max_steps
-    }
-    
-    # env = ColonyEnvironment(env_config)
-    # For demo purposes:
-    class DummyEnv:
-        def __init__(self, config):
-            self.config = config
-            self.n_agents = config['n_agents']
-        
-        def reset(self):
-            obs = [{'grid': np.zeros((7, 7, 5)), 'state': np.zeros(5)} 
-                   for _ in range(self.n_agents)]
-            return obs, {}
-        
-        def step(self, actions):
-            obs = [{'grid': np.zeros((7, 7, 5)), 'state': np.zeros(5)} 
-                   for _ in range(self.n_agents)]
-            rewards = [np.random.randn() for _ in range(self.n_agents)]
-            dones = [False] * self.n_agents
-            truncated = [False] * self.n_agents
-            info = {'step': 0}
-            return obs, rewards, dones, truncated, info
-    
-    env = DummyEnv(env_config)
+    # Create the real Colony Environment
+    env = ColonyEnvironment(n_agents=args.n_agents, grid_size=args.env_size)
     print(f"✓ Environment: {args.env_size}×{args.env_size} grid, {args.n_agents} agents")
     
     # ========================================================================
@@ -163,43 +138,70 @@ def train(args):
     
     print(f"\n🤖 Creating {args.agent.upper()} agent...")
     
+    # Agent parameters (grid shape for observations, state dimension, actions)
+    grid_shape = (7, 7, 5)  # 7x7 local view, 5 channels
+    state_dim = 5  # energy, health, food, water, materials
+    action_dim = 9  # 8 directions + collect
+    
+    agent = None
+    
     if args.agent == "q_learning":
-        # agent = TabularQLearningAgent(...)
+        agent = TabularQLearningAgent(
+            state_dim=state_dim,
+            action_dim=action_dim,
+            learning_rate=args.lr,
+            gamma=args.gamma
+        )
         print("✓ Tabular Q-Learning agent initialized")
-        agent_class = "tabular"
         
     elif args.agent == "dqn":
-        # agent = DQNAgent(...)
+        agent = DQNAgent(
+            grid_shape=grid_shape,
+            state_dim=state_dim,
+            action_dim=action_dim,
+            learning_rate=args.lr,
+            gamma=args.gamma,
+            batch_size=args.batch_size
+        )
         print("✓ DQN agent initialized")
-        agent_class = "dqn"
         
     elif args.agent == "ppo":
-        # agent = PPOAgent(...)
+        agent = PPOAgent(
+            grid_shape=grid_shape,
+            state_dim=state_dim,
+            action_dim=action_dim,
+            learning_rate=args.lr,
+            gamma=args.gamma,
+            batch_size=args.batch_size
+        )
         print("✓ PPO agent initialized")
-        agent_class = "ppo"
         
     elif args.agent == "ma_ppo":
-        # agent = MultiAgentPPO(...)
-        print(f"✓ Multi-Agent PPO initialized ({args.n_agents} agents)")
-        print(f"  Communication: {args.communication}")
-        print(f"  Cooperation bonus: {args.cooperation_bonus}")
-        agent_class = "ma_ppo"
+        # TODO: Implement Multi-Agent PPO
+        print(f"⚠️  Multi-Agent PPO not yet implemented")
+        print(f"   Use --agent ppo for now")
+        return None, {}
         
     elif args.agent == "hierarchical":
-        # agent = HierarchicalAgent(...)
-        print("✓ Hierarchical agent initialized")
-        agent_class = "hierarchical"
+        # TODO: Implement Hierarchical agent
+        print("⚠️  Hierarchical agent not yet implemented")
+        print("   Use --agent ppo for now")
+        return None, {}
+    
+    if agent is None:
+        print(f"❌ Agent type '{args.agent}' not recognized")
+        return None, {}
     
     # Add curiosity wrapper if requested
     if args.curiosity:
-        # agent = CuriosityAgent(agent, curiosity_weight=args.curiosity_weight)
-        print(f"✓ Curiosity module added (weight={args.curiosity_weight})")
+        # TODO: Implement curiosity wrapper
+        print(f"⚠️  Curiosity module not yet implemented (weight={args.curiosity_weight})")
     
     # Initialize curriculum if requested
     curriculum = None
     if args.curriculum:
-        # curriculum = CurriculumManager(initial_difficulty=0.1)
-        print("✓ Curriculum learning enabled")
+        # TODO: Implement curriculum manager
+        print("⚠️  Curriculum learning not yet implemented")
     
     # ========================================================================
     # TRAINING LOOP
@@ -216,34 +218,65 @@ def train(args):
     
     for episode in range(args.episodes):
         # Reset environment
-        observations, info = env.reset()
+        observations = env.reset()
         episode_reward = [0.0] * args.n_agents
         episode_length = 0
         done_flags = [False] * args.n_agents
         
         # Episode loop
         while not all(done_flags) and episode_length < args.max_steps:
-            # Select actions
-            if args.agent == "ma_ppo":
-                # Multi-agent action selection
-                actions = [np.random.randint(0, 9) for _ in range(args.n_agents)]
-            else:
-                # Single agent (control first agent)
-                action = np.random.randint(0, 9)
-                actions = [action] * args.n_agents
+            # Prepare observations for agent (add dummy grid if needed)
+            agent_observations = []
+            for obs in observations:
+                agent_obs = {
+                    'grid': np.zeros((7, 7, 5)),  # Dummy grid for now (TODO: add to environment)
+                    'state': obs['state']
+                }
+                agent_observations.append(agent_obs)
+            
+            # Select actions using agent
+            actions = []
+            log_probs = []
+            values = []
+            
+            for i in range(args.n_agents):
+                if args.agent == "ppo":
+                    action, log_prob, value = agent.select_action(agent_observations[i], training=True)
+                    actions.append(action)
+                    log_probs.append(log_prob)
+                    values.append(value)
+                else:
+                    action = agent.select_action(agent_observations[i], training=True)
+                    actions.append(action)
             
             # Environment step
             next_observations, rewards, dones, truncated, info = env.step(actions)
             
-            # Add curiosity bonus if enabled
-            if args.curiosity:
-                for i in range(args.n_agents):
-                    # intrinsic_reward = agent.compute_intrinsic_reward(...)
-                    # rewards[i] += intrinsic_reward
-                    pass
-            
-            # Store transitions / update agent
-            # (Agent-specific logic here)
+            # Store transitions for agent learning
+            for i in range(args.n_agents):
+                if args.agent == "ppo":
+                    # PPO stores transitions for batch update
+                    agent.store_transition(
+                        agent_observations[i],
+                        actions[i],
+                        rewards[i],
+                        log_probs[i],
+                        values[i],
+                        dones[i] or truncated[i]
+                    )
+                else:
+                    # Q-learning and DQN update immediately
+                    next_agent_obs = {
+                        'grid': np.zeros((7, 7, 5)),
+                        'state': next_observations[i]['state']
+                    }
+                    agent.update(
+                        agent_observations[i],
+                        actions[i],
+                        rewards[i],
+                        next_agent_obs,
+                        dones[i] or truncated[i]
+                    )
             
             # Update metrics
             for i in range(args.n_agents):
@@ -252,6 +285,18 @@ def train(args):
             
             observations = next_observations
             episode_length += 1
+        
+        # Update PPO agent after episode
+        if args.agent == "ppo":
+            loss = agent.update()
+            if loss is not None:
+                writer.add_scalar("train/loss", loss, episode)
+        
+        # Decay exploration rate
+        if hasattr(agent, 'decay_epsilon'):
+            agent.decay_epsilon()
+            if (episode + 1) % 50 == 0:
+                writer.add_scalar("train/epsilon", agent.epsilon, episode)
         
         # Curriculum update
         if curriculum:
@@ -371,18 +416,35 @@ def train(args):
 # ============================================================================
 
 def evaluate_agent(env, agent, n_episodes: int):
-    """Evaluate agent performance"""
+    """Evaluate agent performance without exploration"""
     eval_rewards = []
     
     for ep in range(n_episodes):
-        observations, _ = env.reset()
+        observations = env.reset()
         episode_reward = [0.0] * env.n_agents
         done_flags = [False] * env.n_agents
         steps = 0
         
         while not all(done_flags) and steps < 1000:
+            # Prepare observations for agent
+            agent_observations = []
+            for obs in observations:
+                agent_obs = {
+                    'grid': np.zeros((7, 7, 5)),
+                    'state': obs['state']
+                }
+                agent_observations.append(agent_obs)
+            
             # Select actions (no exploration)
-            actions = [np.random.randint(0, 9) for _ in range(env.n_agents)]
+            actions = []
+            for i in range(env.n_agents):
+                if hasattr(agent, 'select_action'):
+                    if isinstance(agent.select_action(agent_observations[i], training=False), tuple):
+                        # PPO returns (action, log_prob, value)
+                        action, _, _ = agent.select_action(agent_observations[i], training=False)
+                    else:
+                        action = agent.select_action(agent_observations[i], training=False)
+                    actions.append(action)
             
             # Step
             next_observations, rewards, dones, truncated, _ = env.step(actions)
