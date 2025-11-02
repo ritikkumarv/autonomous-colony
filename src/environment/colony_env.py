@@ -308,20 +308,64 @@ class ColonyEnvironment:
         """Get observations for all agents - Simple, focused"""
         return [self._get_agent_observation(agent) for agent in self.agents]
     
+    def _get_local_grid(self, agent: Agent, radius: int = 3) -> np.ndarray:
+        """
+        Extract local grid view centered on agent position.
+        Returns one-hot encoded grid of shape (2*radius+1, 2*radius+1, 5)
+        
+        Args:
+            agent: Agent to center view on
+            radius: View radius (3 = 7x7 grid)
+        
+        Returns:
+            One-hot encoded local grid view with 5 channels
+            (empty, food, water, material, obstacle)
+        """
+        # Extract local region with bounds checking
+        y_min = max(0, agent.position.y - radius)
+        y_max = min(self.world.size, agent.position.y + radius + 1)
+        x_min = max(0, agent.position.x - radius)
+        x_max = min(self.world.size, agent.position.x + radius + 1)
+        
+        local_grid = self.world.grid[y_min:y_max, x_min:x_max]
+        
+        # Pad if agent is near edges (fill with obstacles)
+        pad_top = radius - (agent.position.y - y_min)
+        pad_bottom = radius - (y_max - agent.position.y - 1)
+        pad_left = radius - (agent.position.x - x_min)
+        pad_right = radius - (x_max - agent.position.x - 1)
+        
+        local_grid = np.pad(
+            local_grid, 
+            ((pad_top, pad_bottom), (pad_left, pad_right)), 
+            constant_values=Resource.OBSTACLE
+        )
+        
+        # One-hot encode: 5 channels (empty, food, water, material, obstacle)
+        grid_one_hot = np.eye(5)[local_grid].astype(np.float32)
+        
+        return grid_one_hot
+    
     def _get_agent_observation(self, agent: Agent) -> Dict:
         """
         Get observation for single agent.
-        Simplified - focuses on essential information.
+        Returns dict with 'grid' (7x7x5) and 'state' (5,) arrays.
         """
-        # For simplicity, return normalized stats
+        # Get local grid view (7x7x5)
+        grid = self._get_local_grid(agent, radius=3)
+        
+        # Get normalized state vector (5,)
+        state = np.array([
+            agent.stats.energy / 100.0,
+            agent.stats.health / 100.0,
+            float(agent.stats.food_count) / 10.0,
+            float(agent.stats.water_count) / 10.0,
+            float(agent.stats.material_count) / 10.0
+        ], dtype=np.float32)
+        
         return {
-            'state': np.array([
-                agent.stats.energy / 100.0,
-                agent.stats.health / 100.0,
-                float(agent.stats.food_count) / 10.0,
-                float(agent.stats.water_count) / 10.0,
-                float(agent.stats.material_count) / 10.0
-            ], dtype=np.float32)
+            'grid': grid,
+            'state': state
         }
 
 

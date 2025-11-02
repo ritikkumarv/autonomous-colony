@@ -227,12 +227,8 @@ def train(args):
         while not all(done_flags) and episode_length < args.max_steps:
             # Prepare observations for agent (add dummy grid if needed)
             agent_observations = []
-            for obs in observations:
-                agent_obs = {
-                    'grid': np.zeros((7, 7, 5)),  # Dummy grid for now (TODO: add to environment)
-                    'state': obs['state']
-                }
-                agent_observations.append(agent_obs)
+            # Observations now include both grid and state from environment
+            agent_observations = observations
             
             # Select actions using agent
             actions = []
