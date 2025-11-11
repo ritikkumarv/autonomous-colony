@@ -24,10 +24,23 @@ from torch.utils.tensorboard import SummaryWriter
 from src.environment import ColonyEnvironment
 from src.agents import TabularQLearningAgent, DQNAgent, PPOAgent
 
-# TODO: Import when implemented
-# from src.multiagent import MultiAgentPPO
-# from src.advanced import (WorldModelAgent, CuriosityAgent, 
-#                           HierarchicalAgent, CurriculumManager)
+# Multi-agent imports
+from src.multiagent import (
+    MultiAgentPPO,
+    CommunicationNetwork,
+    CooperationReward,
+    ValueDecompositionNetwork
+)
+
+# Advanced RL imports
+from src.advanced import (
+    IntrinsicCuriosityModule,
+    RandomNetworkDistillation,
+    HierarchicalAgent,
+    WorldModel,
+    MAMLAgent,
+    CurriculumScheduler
+)
 
 # ============================================================================
 # CONFIGURATION
@@ -177,31 +190,81 @@ def train(args):
         print("✓ PPO agent initialized")
         
     elif args.agent == "ma_ppo":
-        # TODO: Implement Multi-Agent PPO
-        print(f"⚠️  Multi-Agent PPO not yet implemented")
-        print(f"   Use --agent ppo for now")
-        return None, {}
+        # Multi-Agent PPO with communication
+        agent = MultiAgentPPO(
+            n_agents=args.n_agents,
+            grid_shape=grid_shape,
+            state_dim=state_dim,
+            action_dim=action_dim,
+            lr=args.lr,
+            gamma=args.gamma,
+            use_communication=args.communication,
+            cooperation_bonus=args.cooperation_bonus,
+            device=str(device)
+        )
+        print(f"✓ Multi-Agent PPO initialized ({args.n_agents} agents)")
+        if args.communication:
+            print("  ✓ Communication network enabled")
         
     elif args.agent == "hierarchical":
-        # TODO: Implement Hierarchical agent
-        print("⚠️  Hierarchical agent not yet implemented")
-        print("   Use --agent ppo for now")
-        return None, {}
+        # Hierarchical RL agent
+        n_high_actions = 4  # High-level options: explore, gather, build, rest
+        agent = HierarchicalAgent(
+            grid_shape=grid_shape,
+            state_dim=state_dim,
+            n_high_actions=n_high_actions,
+            n_low_actions=action_dim,
+            learning_rate=args.lr,
+            gamma=args.gamma
+        )
+        print("✓ Hierarchical RL agent initialized")
+        print(f"  High-level actions: {n_high_actions}")
+        print(f"  Low-level actions: {action_dim}")
     
     if agent is None:
         print(f"❌ Agent type '{args.agent}' not recognized")
         return None, {}
     
-    # Add curiosity wrapper if requested
+    # Initialize cooperation reward if multi-agent
+    cooperation_reward = None
+    if args.agent == "ma_ppo" and args.cooperation_bonus > 0:
+        # Coordination reward shaping expects specific bonus params
+        cooperation_reward = CooperationReward(
+            proximity_bonus=args.cooperation_bonus,
+            sharing_bonus=args.cooperation_bonus * 1.5,
+            joint_bonus=args.cooperation_bonus * 2.0
+        )
+        print(f"✓ Cooperation reward enabled (bonus={args.cooperation_bonus})")
+    
+    # Add curiosity module if requested
+    curiosity_module = None
     if args.curiosity:
-        # TODO: Implement curiosity wrapper
-        print(f"⚠️  Curiosity module not yet implemented (weight={args.curiosity_weight})")
+        curiosity_module = IntrinsicCuriosityModule(
+            state_dim=state_dim,
+            action_dim=action_dim,
+            eta=args.curiosity_weight
+        )
+        print(f"✓ Curiosity module enabled (weight={args.curiosity_weight})")
     
     # Initialize curriculum if requested
     curriculum = None
     if args.curriculum:
-        # TODO: Implement curriculum manager
-        print("⚠️  Curriculum learning not yet implemented")
+        curriculum = CurriculumScheduler(
+            initial_difficulty=0.3,
+            success_threshold=0.7,
+            window_size=20
+        )
+        print(f"✓ Curriculum learning enabled (initial difficulty: {curriculum.difficulty:.2f})")
+    
+    # Initialize world model if requested
+    world_model = None
+    if args.world_model:
+        world_model = WorldModel(
+            state_dim=state_dim,
+            action_dim=action_dim,
+            hidden_dim=128
+        )
+        print("✓ World model enabled for model-based planning")
     
     # ========================================================================
     # TRAINING LOOP
@@ -216,18 +279,31 @@ def train(args):
     success_count = 0
     best_reward = -float('inf')
     
+    # Advanced metrics
+    curiosity_rewards_history = []
+    cooperation_rewards_history = []
+    
     for episode in range(args.episodes):
+        # Update curriculum difficulty if enabled
+        if curriculum and episode > 0:
+            recent_success_rate = success_count / episode
+            # CurriculumScheduler expects: record_episode then update_difficulty
+            curriculum.record_episode(recent_success_rate > 0.7, reward=episode_rewards[-1])
+            curriculum.update_difficulty()
+            # Adjust environment difficulty (if environment supports it)
+            # env.set_difficulty(curriculum.difficulty)
+        
         # Reset environment
         observations = env.reset()
         episode_reward = [0.0] * args.n_agents
+        episode_curiosity_reward = 0.0
+        episode_cooperation_reward = 0.0
         episode_length = 0
         done_flags = [False] * args.n_agents
         
         # Episode loop
         while not all(done_flags) and episode_length < args.max_steps:
-            # Prepare observations for agent (add dummy grid if needed)
-            agent_observations = []
-            # Observations now include both grid and state from environment
+            # Prepare observations for agent
             agent_observations = observations
             
             # Select actions using agent
@@ -235,58 +311,158 @@ def train(args):
             log_probs = []
             values = []
             
-            for i in range(args.n_agents):
-                if args.agent == "ppo":
-                    action, log_prob, value = agent.select_action(agent_observations[i], training=True)
-                    actions.append(action)
-                    log_probs.append(log_prob)
-                    values.append(value)
-                else:
-                    action = agent.select_action(agent_observations[i], training=True)
-                    actions.append(action)
+            if args.agent == "ma_ppo":
+                # Multi-agent action selection (MAPPO API expects a list of observations)
+                actions, log_probs, value = agent.select_action(agent_observations, training=True)
+            else:
+                # Single agent or independent agents
+                for i in range(args.n_agents):
+                    if args.agent == "ppo":
+                        action, log_prob, value = agent.select_action(agent_observations[i], training=True)
+                        actions.append(action)
+                        log_probs.append(log_prob)
+                        values.append(value)
+                    elif args.agent == "hierarchical":
+                        action, log_prob, value = agent.select_action(agent_observations[i], training=True)
+                        actions.append(action)
+                        log_probs.append(log_prob)
+                        values.append(value)
+                    else:
+                        action = agent.select_action(agent_observations[i], training=True)
+                        actions.append(action)
             
             # Environment step
             next_observations, rewards, dones, truncated, info = env.step(actions)
             
-            # Store transitions for agent learning
-            for i in range(args.n_agents):
-                if args.agent == "ppo":
-                    # PPO stores transitions for batch update
-                    agent.store_transition(
-                        agent_observations[i],
-                        actions[i],
-                        rewards[i],
-                        log_probs[i],
-                        values[i],
-                        dones[i] or truncated[i]
+            # Compute intrinsic curiosity reward
+            intrinsic_rewards = [0.0] * args.n_agents
+            if curiosity_module:
+                for i in range(args.n_agents):
+                    # Extract state vectors for ICM (uses state_dim tensors)
+                    state_vec = torch.FloatTensor(agent_observations[i]['state']).unsqueeze(0)
+                    next_state_vec = torch.FloatTensor(next_observations[i]['state']).unsqueeze(0)
+                    action_tensor = torch.LongTensor([actions[i]])
+                    
+                    intrinsic_reward = curiosity_module.compute_intrinsic_reward(
+                        state_vec,
+                        action_tensor,
+                        next_state_vec
                     )
+                    intrinsic_rewards[i] = intrinsic_reward.item()
+                    episode_curiosity_reward += intrinsic_rewards[i]
+            
+            # Compute cooperation reward
+            cooperation_bonus = [0.0] * args.n_agents
+            if cooperation_reward:
+                # Derive simplified inputs for cooperation calculations
+                positions = [obs.get('pos', (0, 0)) for obs in agent_observations]
+                resources = [obs.get('resources', {}) for obs in agent_observations]
+                proximity = cooperation_reward.compute_proximity_reward(positions)
+                sharing = cooperation_reward.compute_sharing_reward(resources)
+                joint = cooperation_reward.compute_joint_task_reward(info.get('tasks_completed', 0) if isinstance(info, dict) else 0,
+                                                                    len([1 for a in actions if a is not None]))
+
+                # Distribute team bonuses evenly
+                total_team_bonus = proximity + sharing + joint
+                if args.n_agents > 0:
+                    per_agent_bonus = total_team_bonus / args.n_agents
                 else:
-                    # Q-learning and DQN update immediately
-                    next_agent_obs = {
-                        'grid': np.zeros((7, 7, 5)),
-                        'state': next_observations[i]['state']
-                    }
-                    agent.update(
-                        agent_observations[i],
-                        actions[i],
-                        rewards[i],
-                        next_agent_obs,
-                        dones[i] or truncated[i]
+                    per_agent_bonus = 0.0
+
+                cooperation_bonus = [per_agent_bonus for _ in range(args.n_agents)]
+                episode_cooperation_reward += sum(cooperation_bonus)
+            
+            # Combined rewards
+            combined_rewards = [
+                rewards[i] + intrinsic_rewards[i] + cooperation_bonus[i]
+                for i in range(args.n_agents)
+            ]
+            # Combined rewards
+            combined_rewards = [
+                rewards[i] + intrinsic_rewards[i] + cooperation_bonus[i]
+                for i in range(args.n_agents)
+            ]
+            
+            # Store transitions for agent learning
+            if args.agent == "ma_ppo":
+                # Multi-agent PPO stores transition via MAPPO.store_transition
+                # MAPPO expects: observations, actions, log_probs, rewards, value, done
+                done_flag = any([dones[i] or truncated[i] for i in range(args.n_agents)])
+                agent.store_transition(
+                    agent_observations,
+                    actions,
+                    log_probs,
+                    combined_rewards,
+                    value,
+                    done_flag
+                )
+            else:
+                for i in range(args.n_agents):
+                    if args.agent in ["ppo", "hierarchical"]:
+                        # PPO and hierarchical store transitions for batch update
+                        agent.store_transition(
+                            agent_observations[i],
+                            actions[i],
+                            combined_rewards[i],
+                            log_probs[i],
+                            values[i],
+                            dones[i] or truncated[i]
+                        )
+                    else:
+                        # Q-learning and DQN update immediately
+                        agent.update(
+                            agent_observations[i],
+                            actions[i],
+                            combined_rewards[i],
+                            next_observations[i],
+                            dones[i] or truncated[i]
+                        )
+            
+            # Update curiosity module (ICM doesn't have update; we only use intrinsic reward)
+            # Intrinsic reward already computed above, no further training needed here
+            
+            # Update world model
+            if world_model and hasattr(world_model, 'update'):
+                for i in range(args.n_agents):
+                    # Extract state vectors from observations (WorldModel uses state_dim tensors)
+                    state_vec = torch.FloatTensor(agent_observations[i]['state']).unsqueeze(0)
+                    next_state_vec = torch.FloatTensor(next_observations[i]['state']).unsqueeze(0)
+                    action_tensor = torch.LongTensor([actions[i]])
+                    reward_tensor = torch.FloatTensor([[combined_rewards[i]]])
+                    done_tensor = torch.FloatTensor([[1.0 if (dones[i] or truncated[i]) else 0.0]])
+                    
+                    world_model.update(
+                        state_vec,
+                        action_tensor,
+                        next_state_vec,
+                        reward_tensor,
+                        done_tensor
                     )
             
             # Update metrics
             for i in range(args.n_agents):
-                episode_reward[i] += rewards[i]
+                episode_reward[i] += rewards[i]  # Track environment rewards only
                 done_flags[i] = dones[i] or truncated[i]
             
             observations = next_observations
             episode_length += 1
         
-        # Update PPO agent after episode
-        if args.agent == "ppo":
+        # Update agent after episode
+        if args.agent in ["ppo", "hierarchical", "ma_ppo"]:
             loss = agent.update()
             if loss is not None:
-                writer.add_scalar("train/loss", loss, episode)
+                # loss may be a dict of metrics for MAPPO
+                if isinstance(loss, dict):
+                    for k, v in loss.items():
+                        try:
+                            writer.add_scalar(f"train/{k}", v, episode)
+                        except Exception:
+                            pass
+                else:
+                    try:
+                        writer.add_scalar("train/loss", float(loss), episode)
+                    except Exception:
+                        pass
         
         # Decay exploration rate
         if hasattr(agent, 'decay_epsilon'):
@@ -294,16 +470,22 @@ def train(args):
             if (episode + 1) % 50 == 0:
                 writer.add_scalar("train/epsilon", agent.epsilon, episode)
         
-        # Curriculum update
-        if curriculum:
-            mean_reward = np.mean(episode_reward)
-            success = mean_reward > 50  # Threshold
-            # curriculum.update_difficulty(mean_reward, success)
-        
         # Compute metrics
         mean_reward = np.mean(episode_reward)
         episode_rewards.append(mean_reward)
         episode_lengths.append(episode_length)
+        
+        # Track advanced metrics
+        if curiosity_module:
+            curiosity_rewards_history.append(episode_curiosity_reward / max(episode_length, 1))
+            writer.add_scalar("train/curiosity_reward", episode_curiosity_reward, episode)
+        
+        if cooperation_reward:
+            cooperation_rewards_history.append(episode_cooperation_reward / max(episode_length, 1))
+            writer.add_scalar("train/cooperation_reward", episode_cooperation_reward, episode)
+        
+        if curriculum:
+            writer.add_scalar("curriculum/difficulty", curriculum.difficulty, episode)
         
         if mean_reward > best_reward:
             best_reward = mean_reward
@@ -313,10 +495,6 @@ def train(args):
         writer.add_scalar("train/episode_reward", mean_reward, episode)
         writer.add_scalar("train/episode_length", episode_length, episode)
         writer.add_scalar("train/best_reward", best_reward, episode)
-        
-        if args.curriculum:
-            # writer.add_scalar("curriculum/difficulty", curriculum.get_difficulty(), episode)
-            pass
         
         # Console logging
         if (episode + 1) % 10 == 0:
@@ -329,11 +507,22 @@ def train(args):
             print(f"  Episode Length: {episode_length}")
             print(f"  Best Reward: {best_reward:.2f}")
             print(f"  Success Rate: {success_count / (episode + 1):.2%}")
+            
+            if curiosity_module:
+                avg_curiosity = np.mean(curiosity_rewards_history[-10:])
+                print(f"  Curiosity Reward: {avg_curiosity:.3f}")
+            
+            if cooperation_reward:
+                avg_coop = np.mean(cooperation_rewards_history[-10:])
+                print(f"  Cooperation Reward: {avg_coop:.3f}")
+            
+            if curriculum:
+                print(f"  Curriculum Difficulty: {curriculum.difficulty:.2f}")
         
         # Evaluation
         if (episode + 1) % args.eval_freq == 0:
             print(f"\n📊 Evaluating at episode {episode + 1}...")
-            eval_rewards = evaluate_agent(env, agent, args.eval_episodes)
+            eval_rewards = evaluate_agent(env, agent, args.eval_episodes, agent_type=args.agent)
             eval_mean = np.mean(eval_rewards)
             eval_std = np.std(eval_rewards)
             
@@ -364,7 +553,7 @@ def train(args):
     
     # Final evaluation
     print("\n📊 Final Evaluation...")
-    final_eval_rewards = evaluate_agent(env, agent, args.eval_episodes * 2)
+    final_eval_rewards = evaluate_agent(env, agent, args.eval_episodes * 2, agent_type=args.agent)
     final_mean = np.mean(final_eval_rewards)
     final_std = np.std(final_eval_rewards)
     
@@ -411,7 +600,7 @@ def train(args):
 # EVALUATION FUNCTION
 # ============================================================================
 
-def evaluate_agent(env, agent, n_episodes: int):
+def evaluate_agent(env, agent, n_episodes: int, agent_type: str = "ppo"):
     """Evaluate agent performance without exploration"""
     eval_rewards = []
     
@@ -422,25 +611,21 @@ def evaluate_agent(env, agent, n_episodes: int):
         steps = 0
         
         while not all(done_flags) and steps < 1000:
-            # Prepare observations for agent
-            agent_observations = []
-            for obs in observations:
-                agent_obs = {
-                    'grid': np.zeros((7, 7, 5)),
-                    'state': obs['state']
-                }
-                agent_observations.append(agent_obs)
-            
             # Select actions (no exploration)
             actions = []
-            for i in range(env.n_agents):
-                if hasattr(agent, 'select_action'):
-                    if isinstance(agent.select_action(agent_observations[i], training=False), tuple):
-                        # PPO returns (action, log_prob, value)
-                        action, _, _ = agent.select_action(agent_observations[i], training=False)
+            
+            if agent_type == "ma_ppo":
+                # Multi-agent action selection (MAPPO API uses select_action)
+                actions, log_probs, value = agent.select_action(observations, training=False)
+            else:
+                # Single agent or independent agents
+                for i in range(env.n_agents):
+                    if agent_type in ["ppo", "hierarchical"]:
+                        action, _, _ = agent.select_action(observations[i], training=False)
+                        actions.append(action)
                     else:
-                        action = agent.select_action(agent_observations[i], training=False)
-                    actions.append(action)
+                        action = agent.select_action(observations[i], training=False)
+                        actions.append(action)
             
             # Step
             next_observations, rewards, dones, truncated, _ = env.step(actions)
@@ -465,22 +650,47 @@ def save_checkpoint(agent, optimizer, episode, reward, path):
     checkpoint = {
         'episode': episode,
         'reward': reward,
-        # 'model_state_dict': agent.state_dict() if hasattr(agent, 'state_dict') else None,
-        # 'optimizer_state_dict': optimizer.state_dict() if optimizer else None,
     }
     
-    # torch.save(checkpoint, path)
-    print(f"Checkpoint saved (demo mode)")
+    # Save agent state
+    if hasattr(agent, 'state_dict'):
+        checkpoint['model_state_dict'] = agent.state_dict()
+    elif hasattr(agent, 'actor') and hasattr(agent.actor, 'state_dict'):
+        checkpoint['actor_state_dict'] = agent.actor.state_dict()
+        if hasattr(agent, 'critic'):
+            checkpoint['critic_state_dict'] = agent.critic.state_dict()
+    
+    # Save optimizer state
+    if optimizer and hasattr(optimizer, 'state_dict'):
+        checkpoint['optimizer_state_dict'] = optimizer.state_dict()
+    
+    torch.save(checkpoint, path)
+    print(f"✓ Checkpoint saved to {path}")
 
 def load_checkpoint(agent, optimizer, path):
     """Load model checkpoint"""
-    # checkpoint = torch.load(path)
-    # agent.load_state_dict(checkpoint['model_state_dict'])
-    # if optimizer and checkpoint['optimizer_state_dict']:
-    #     optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
-    # return checkpoint['episode'], checkpoint['reward']
-    print(f"Checkpoint loaded from {path} (demo mode)")
-    return 0, 0.0
+    checkpoint = torch.load(path, weights_only=False)
+    
+    # Load agent state
+    if 'model_state_dict' in checkpoint and hasattr(agent, 'load_state_dict'):
+        agent.load_state_dict(checkpoint['model_state_dict'])
+    elif 'actor_state_dict' in checkpoint:
+        if hasattr(agent, 'actor'):
+            agent.actor.load_state_dict(checkpoint['actor_state_dict'])
+        if 'critic_state_dict' in checkpoint and hasattr(agent, 'critic'):
+            agent.critic.load_state_dict(checkpoint['critic_state_dict'])
+    
+    # Load optimizer state
+    if optimizer and 'optimizer_state_dict' in checkpoint:
+        optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+    
+    episode = checkpoint.get('episode', 0)
+    reward = checkpoint.get('reward', 0.0)
+    
+    print(f"✓ Checkpoint loaded from {path}")
+    print(f"  Episode: {episode}, Reward: {reward:.2f}")
+    
+    return episode, reward
 
 # ============================================================================
 # VISUALIZATION

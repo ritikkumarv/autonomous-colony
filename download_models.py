@@ -56,7 +56,7 @@ def verify_model(model_path: str):
     import torch
     
     try:
-        checkpoint = torch.load(model_path, map_location='cpu')
+        checkpoint = torch.load(model_path, map_location='cpu', weights_only=False)
         print(f"\n✅ Model Verified: {model_path}")
         print(f"   Episode: {checkpoint.get('episode', 'Unknown')}")
         

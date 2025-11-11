@@ -5,22 +5,22 @@ VISUALIZATION SESSION SUMMARY
 Episodes: 5
 
 Rewards:
-  Mean: 0.00
-  Std:  0.00
-  Min:  0.00
-  Max:  0.00
+  Mean: 104.24
+  Std:  20.47
+  Min:  74.40
+  Max:  134.20
 
 Episode Lengths:
-  Mean: 1
+  Mean: 500
   Std:  0
-  Min:  1
-  Max:  1
+  Min:  500
+  Max:  500
 
-Success Rate: 0.0%
+Success Rate: 100.0%
 
 Per-Episode Details:
-  Episode 0: Reward=0.00, Steps=1, Success=✗
-  Episode 1: Reward=0.00, Steps=1, Success=✗
-  Episode 2: Reward=0.00, Steps=1, Success=✗
-  Episode 3: Reward=0.00, Steps=1, Success=✗
-  Episode 4: Reward=0.00, Steps=1, Success=✗
+  Episode 0: Reward=111.70, Steps=500, Success=✓
+  Episode 1: Reward=111.00, Steps=500, Success=✓
+  Episode 2: Reward=134.20, Steps=500, Success=✓
+  Episode 3: Reward=89.90, Steps=500, Success=✓
+  Episode 4: Reward=74.40, Steps=500, Success=✓

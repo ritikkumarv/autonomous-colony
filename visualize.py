@@ -127,7 +127,7 @@ class VisualizationSession:
                 )
             
             observations = next_observations
-            done = truncated or all(dones)
+            done = truncated[0] or all(dones)
             step += 1
         
         # Episode metrics
@@ -259,7 +259,7 @@ def load_agent(model_path: str, env: ColonyEnvironment, device: str = "cpu"):
     Returns:
         agent: Loaded agent
     """
-    checkpoint = torch.load(model_path, map_location=device)
+    checkpoint = torch.load(model_path, map_location=device, weights_only=False)
     
     # Detect agent type from checkpoint or filename
     if 'ppo' in model_path.lower():

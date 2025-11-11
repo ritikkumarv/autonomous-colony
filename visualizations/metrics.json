@@ -1,57 +1,57 @@
 [
   {
     "episode": 0,
-    "steps": 1,
-    "total_reward": 0.0,
-    "avg_reward": 0.0,
+    "steps": 500,
+    "total_reward": 111.70000000000005,
+    "avg_reward": 55.85000000000002,
     "agent_rewards": [
-      0.0,
-      0.0
+      56.89999999999997,
+      54.79999999999999
     ],
-    "success": false
+    "success": true
   },
   {
     "episode": 1,
-    "steps": 1,
-    "total_reward": 0.0,
-    "avg_reward": 0.0,
+    "steps": 500,
+    "total_reward": 111.00000000000014,
+    "avg_reward": 55.50000000000007,
     "agent_rewards": [
-      0.0,
-      0.0
+      44.59999999999999,
+      66.39999999999998
     ],
-    "success": false
+    "success": true
   },
   {
     "episode": 2,
-    "steps": 1,
-    "total_reward": 0.0,
-    "avg_reward": 0.0,
+    "steps": 500,
+    "total_reward": 134.2000000000001,
+    "avg_reward": 67.10000000000005,
     "agent_rewards": [
-      0.0,
-      0.0
+      46.799999999999976,
+      87.4
     ],
-    "success": false
+    "success": true
   },
   {
     "episode": 3,
-    "steps": 1,
-    "total_reward": 0.0,
-    "avg_reward": 0.0,
+    "steps": 500,
+    "total_reward": 89.90000000000006,
+    "avg_reward": 44.95000000000003,
     "agent_rewards": [
-      0.0,
-      0.0
+      46.49999999999997,
+      43.399999999999984
     ],
-    "success": false
+    "success": true
   },
   {
     "episode": 4,
-    "steps": 1,
-    "total_reward": 0.0,
-    "avg_reward": 0.0,
+    "steps": 500,
+    "total_reward": 74.40000000000003,
+    "avg_reward": 37.20000000000002,
     "agent_rewards": [
-      0.0,
-      0.0
+      50.799999999999976,
+      23.59999999999998
     ],
-    "success": false
+    "success": true
   }
 ]

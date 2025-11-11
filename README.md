@@ -845,7 +845,158 @@ if step % accumulation_steps == 0:
 
 ---
 
-## 📜 License
+## � Complete Workflow: Train → Visualize
+
+### 1. Train on Colab (GPU Accelerated)
+
+```bash
+# Open colab_training.ipynb in Google Colab
+# Select GPU runtime (Runtime → Change runtime type → GPU T4)
+# Run all cells to train agent for 500+ episodes
+
+# Training completes in ~10-30 minutes with GPU
+# Final model automatically saved to Google Drive
+```
+
+### 2. Download Trained Model
+
+```bash
+# In Colab, models are saved to:
+/content/drive/MyDrive/colony_models/
+
+# Download to your local machine
+# Place in: models/ppo_final_YYYYMMDD_HHMMSS.pt
+```
+
+### 3. Visualize Locally
+
+```bash
+# Verify model loads correctly
+python download_models.py --verify models/ppo_final_20251111_075211.pt
+
+# Run visualization
+python visualize.py \
+  --model models/ppo_final_20251111_075211.pt \
+  --episodes 10 \
+  --no-render  # Generate images instead of live display
+
+# Output saved to visualizations/:
+# - heatmaps.png (exploration patterns)
+# - trajectories.png (agent paths)
+# - dashboard.png (training metrics)
+# - metrics.json (detailed statistics)
+# - summary.txt (episode summaries)
+```
+
+### 4. Analyze Results
+
+```python
+import json
+with open('visualizations/metrics.json') as f:
+    data = json.load(f)
+    
+for ep in data:
+    print(f"Episode {ep['episode']}: {ep['total_reward']:.2f} reward")
+```
+
+---
+
+## 🎮 Training Examples
+
+### Basic PPO Training (Local CPU)
+```bash
+python train.py \
+  --agent ppo \
+  --episodes 500 \
+  --n_agents 2 \
+  --env_size 20 \
+  --lr 3e-4 \
+  --gamma 0.99
+```
+
+### Multi-Agent PPO with Communication
+```bash
+python train.py \
+  --agent ma_ppo \
+  --n_agents 4 \
+  --episodes 500 \
+  --communication \
+  --cooperation_bonus 2.0 \
+  --env_size 25
+```
+
+### Advanced: Curiosity + Curriculum Learning
+```bash
+python train.py \
+  --agent ppo \
+  --episodes 800 \
+  --curiosity \
+  --curiosity_weight 0.5 \
+  --curriculum \
+  --n_agents 3 \
+  --env_size 30
+```
+
+### Full Feature Set
+```bash
+python train.py \
+  --agent ma_ppo \
+  --n_agents 6 \
+  --episodes 1000 \
+  --communication \
+  --curiosity \
+  --curriculum \
+  --world_model \
+  --cooperation_bonus 2.5 \
+  --curiosity_weight 0.3 \
+  --env_size 35 \
+  --save_freq 50 \
+  --eval_freq 20
+```
+
+### Hierarchical RL
+```bash
+python train.py \
+  --agent hierarchical \
+  --episodes 600 \
+  --n_agents 2 \
+  --env_size 25 \
+  --lr 1e-4
+```
+
+---
+
+## 📈 Monitoring Training
+
+### TensorBoard
+
+```bash
+# Start TensorBoard (in separate terminal)
+tensorboard --logdir logs
+
+# Open browser to http://localhost:6006
+
+# View metrics:
+# - train/episode_reward
+# - train/episode_length
+# - train/policy_loss
+# - train/value_loss
+# - train/curiosity_reward (if enabled)
+# - curriculum/difficulty (if enabled)
+```
+
+### Console Output
+```
+Episode 100/500
+  Avg Reward (last 10): 45.32 ± 8.12
+  Episode Length: 324
+  Best Reward: 62.19
+  Success Rate: 67.00%
+  Curiosity Reward: 0.042
+  Curriculum Difficulty: 0.45
+```
+
+---
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
