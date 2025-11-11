@@ -14,6 +14,10 @@ from .curiosity import (
     RandomNetworkDistillation
 )
 
+# Aliases for convenience
+ICM = IntrinsicCuriosityModule
+RND = RandomNetworkDistillation
+
 from .hierarchical import (
     Option,
     HierarchicalAgent,
@@ -42,6 +46,8 @@ __all__ = [
     # Curiosity
     'IntrinsicCuriosityModule',
     'RandomNetworkDistillation',
+    'ICM',  # Alias
+    'RND',  # Alias
     # Hierarchical RL
     'Option',
     'HierarchicalAgent',
