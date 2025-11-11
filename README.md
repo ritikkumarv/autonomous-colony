@@ -86,7 +86,21 @@
 
 ## 🚀 Quick Start
 
-### Option 1: Google Colab (Recommended for Beginners)
+### Option 1: Train on Google Colab with GPU (Recommended)
+
+🚀 **[Open Training Notebook in Colab](https://colab.research.google.com/github/ritikkumarv/autonomous-colony/blob/main/colab_training.ipynb)**
+
+Train agents **10-100x faster** with free GPU/TPU:
+
+1. Click the badge above to open in Colab
+2. Runtime → Change runtime type → **GPU (T4)**
+3. Run all cells
+4. Download trained models from Google Drive
+5. Use locally with `visualize.py`
+
+📖 **[Full Colab Training Guide](COLAB_TRAINING.md)**
+
+### Option 2: Interactive Learning Notebooks
 
 1. **Part 1: Environment**
 ```python
@@ -112,27 +126,30 @@
 # Push the boundaries of what's possible
 ```
 
-### Option 2: Local Setup
+### Option 3: Local Visualization (After Colab Training)
 
 ```bash
 # Clone repository
-git clone https://github.com/yourusername/autonomous-colony.git
+git clone https://github.com/ritikkumarv/autonomous-colony.git
 cd autonomous-colony
 
 # Install dependencies
 pip install -r requirements.txt
 
-# Run training
-python train.py --agent ppo --n_agents 4 --episodes 500
+# Download your trained model from Google Drive to models/
+
+# Visualize trained agent
+python visualize.py --model models/ppo_final.pt --episodes 10
 ```
 
-### Option 3: GitHub Codespaces
+### Option 4: Local Training (CPU)
 
 ```bash
-# Open in Codespaces (free tier available)
-# All dependencies pre-installed
-# GPU support for faster training
+# For local development (slower than Colab)
+python train.py --agent ppo --n_agents 2 --episodes 100
 ```
+
+**Note:** Local CPU training is much slower. Use Google Colab with GPU for serious training!
 
 ### Dependencies
 

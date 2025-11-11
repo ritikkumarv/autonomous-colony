@@ -1,0 +1,26 @@
+================================================================================
+VISUALIZATION SESSION SUMMARY
+================================================================================
+
+Episodes: 5
+
+Rewards:
+  Mean: 0.00
+  Std:  0.00
+  Min:  0.00
+  Max:  0.00
+
+Episode Lengths:
+  Mean: 1
+  Std:  0
+  Min:  1
+  Max:  1
+
+Success Rate: 0.0%
+
+Per-Episode Details:
+  Episode 0: Reward=0.00, Steps=1, Success=✗
+  Episode 1: Reward=0.00, Steps=1, Success=✗
+  Episode 2: Reward=0.00, Steps=1, Success=✗
+  Episode 3: Reward=0.00, Steps=1, Success=✗
+  Episode 4: Reward=0.00, Steps=1, Success=✗
